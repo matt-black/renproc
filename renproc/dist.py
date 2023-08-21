@@ -28,9 +28,16 @@ def fit_distribution(t, p, dist, curve='pdf', p0=None):
     elif dist == 'weibull':
         d = Weibull(None, None)
         p0 = [mu, 1] if p0 is None else p0
+    elif dist == 'delaywei':
+        d = DelayedWeibull(None, None, None)
+        if p0 is None:
+            p0 = [mu, 1, numpy.amin(t[p>0.0001])]
     elif dist == 'gamma':
         d = Gamma(None, None)
         p0 = [1/mu, 1] if p0 is None else p0
+    elif dist == 'delaygam':
+        d = DelayedGamma(None, None, None)
+        p0 = [1/mu, 1, numpy.amin(t[p>0.0001])]
     elif dist == 'pareto':
         d = Pareto(None, None)
         p0 = [numpy.amin(t[p>0.0001]), 0.5]
@@ -43,8 +50,8 @@ def fit_distribution(t, p, dist, curve='pdf', p0=None):
     return scipy.optimize.curve_fit(fun, t, y, p0=p0)
 
 
-__DISTRIBUTIONS = ('exponential', 'delayexp', 'weibull', 'gamma',
-                   'pareto', 'burr')
+__DISTRIBUTIONS = ('exponential', 'delayexp', 'weibull', 'delaywei',
+                   'gamma', 'delaygam', 'pareto', 'burr')
 
 
 class Distribution(object):
@@ -134,7 +141,7 @@ class Weibull(Distribution):
         _lambda = self._lambda if _lambda is None else _lambda
         _k = self._k if _k is None else _k
         return (_k/_lambda)*numpy.power(t/_lambda, _k-1) * \
-            numpy.exp(-numpy.power(t/_lambda, k))
+            numpy.exp(-numpy.power(t/_lambda, _k))
 
     def cdf(self, t, _lambda=None, _k=None):
         _lambda = self._lambda if _lambda is None else _lambda
@@ -157,6 +164,48 @@ class Weibull(Distribution):
         gam2 = scipy.special.gamma(1 + 2/_k)
         gam1 = scipy.special.gamma(1 + 1/_k)
         return numpy.square(_lambda) * (gam2 - numpy.square(gam1))
+
+
+class DelayedWeibull(Distribution):
+    def __init__(self, _lambda, _k, _delay=0):
+        self._lambda = _lambda
+        self._k = _k
+        self._delay = _delay
+
+    def pdf(self, t, _lambda=None, _k=None, _delay=None):
+        _lambda = self._lambda if _lambda is None else _lambda
+        _k = self._k if _k is None else _k
+        _delay = self._delay if _delay is None else _delay
+        filt = t >= _delay
+        zero = numpy.zeros((numpy.sum(numpy.logical_not(filt)),))
+        rest = Weibull(_lambda, _k).pdf(t[filt]-_delay)
+        return numpy.concatenate([zero, rest])
+
+    def cdf(self, t, _lambda=None, _k=None, _delay=None):
+        _lambda = self._lambda if _lambda is None else _lambda
+        _k = self._k if _k is None else _k
+        _delay = self._delay if _delay is None else _delay
+        filt = t >= _delay
+        zero = numpy.zeros((numpy.sum(numpy.logical_not(filt)),))
+        rest = Weibull(_lambda, _k).cdf(t[filt]-_delay)
+        return numpy.concatenate([zero, rest])
+
+    def mean(self, _lambda=None, _k=None, _delay=None):
+        _lambda = self._lambda if _lambda is None else _lambda
+        _k = self._k if _k is None else _k
+        return _lambda * scipy.special.gamma(1 + 1/_k) + _delay
+
+    def median(self, _lambda=None, _k=None, _delay=None):
+        _lambda = self._lambda if _lambda is None else _lambda
+        _k = self._k if _k is None else _k
+        return _lambda * numpy.power(numpy.log(2), 1/k) + _delay
+
+    def variance(self, _lambda=None, _k=None, _delay=None):
+        _lambda = self._lambda if _lambda is None else _lambda
+        _k = self._k if _k is None else _k
+        gam2 = scipy.special.gamma(1 + 2/_k)
+        gam1 = scipy.special.gamma(1 + 1/_k)
+        return numpy.square(_lambda) * (gam2 - numpy.square(gam1))
     
 
 class Gamma(Distribution):
@@ -167,7 +216,7 @@ class Gamma(Distribution):
     def pdf(self, t, _alpha=None, _beta=None):
         _alpha = self._alpha if _alpha is None else _alpha
         _beta = self._beta if _beta is None else _beta
-        return numpy.power(_beta, _alpha)/scipy.special.gamma(alpha) * \
+        return numpy.power(_beta, _alpha)/scipy.special.gamma(_alpha) * \
             numpy.power(t, _alpha-1) * numpy.exp(-_beta*t)
 
     def cdf(self, t, _alpha=None, _beta=None):
@@ -188,6 +237,34 @@ class Gamma(Distribution):
         _alpha = self._alpha if _alpha is None else _alpha
         _beta = self._beta if _beta is None else _beta
         return _alpha / numpy.square(_beta)
+
+
+class DelayedGamma(Gamma):
+    def __init__(self, _alpha, _beta, _delay):
+        super().__init__(_alpha, _beta)
+        self._delay = _delay
+
+    def pdf(self, t, _alpha=None, _beta=None, _delay=None):
+        _alpha = self._alpha if _alpha is None else _alpha
+        _beta = self._beta if _beta is None else _beta
+        _delay = self._delay if _delay is None else _delay
+        filt = t >= _delay
+        zero = numpy.zeros((numpy.sum(numpy.logical_not(filt)),))
+        rest = super().pdf(t[filt]-_delay, _alpha, _beta)
+        return numpy.concatenate([zero, rest])
+
+    def cdf(self, t, _alpha=None, _beta=None, _delay=None):
+        _alpha = self._alpha if _alpha is None else _alpha
+        _beta = self._beta if _beta is None else _beta
+        _delay = self._delay if _delay is None else _delay
+        filt = t >= _delay
+        zero = numpy.zeros((numpy.sum(numpy.logical_not(filt)),))
+        rest = super().cdf(t[filt]-_delay, _alpha, _beta)
+        return numpy.concatenate([zero, rest])
+
+    def mean(self, _alpha=None, _beta=None, _delay=None):
+        _delay = self._delay if _delay is None else _delay
+        return super().mean(_alpha, _beta) + _delay
 
 
 class Pareto(Distribution):
