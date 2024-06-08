@@ -78,7 +78,8 @@ def mod_rt_iter(T, n_xyzw, p_old, v_old, mu0=0):
     return p_new, v_new, mu
 
 
-def modified_rt(T, p_old, v_old, n_iter, mu0=0, verbose=False):
+def modified_rt(T, p_old, v_old, n_iter, mu0=0,
+                return_mu=False, verbose=False):
     """the modified RT algorithm
     the input array, T, should have 5 columns like [t, x, y, z, w]
     (as in the 'Data' side of Table 1 in Soon & Woodrofe)
@@ -102,7 +103,10 @@ def modified_rt(T, p_old, v_old, n_iter, mu0=0, verbose=False):
         delp[i], delv[i] = dp, dv
         # new is next iter's old
         p_old, v_old, mu0 = p_new.copy(), v_new.copy(), mu_new
-    return (p_new, v_new), (delp, delv)
+    if return_mu:
+        return (p_new, v_new), (delp, delv), mu_new
+    else:
+        return (p_new, v_new), (delp, delv)
 
 
 def initialize_pv(T):

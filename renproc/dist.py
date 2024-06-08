@@ -34,10 +34,10 @@ def fit_distribution(t, p, dist, curve='pdf', p0=None):
             p0 = [mu, 1, numpy.amin(t[p>0.0001])]
     elif dist == 'gamma':
         d = Gamma(None, None)
-        p0 = [1/mu, 1] if p0 is None else p0
+        p0 = [1, mu] if p0 is None else p0
     elif dist == 'delaygam':
         d = DelayedGamma(None, None, None)
-        p0 = [1/mu, 1, numpy.amin(t[p>0.0001])]
+        p0 = [1, mu, numpy.amin(t[p>0.0001])]
     elif dist == 'pareto':
         d = Pareto(None, None)
         p0 = [numpy.amin(t[p>0.0001]), 0.5]
@@ -193,12 +193,14 @@ class DelayedWeibull(Distribution):
     def mean(self, _lambda=None, _k=None, _delay=None):
         _lambda = self._lambda if _lambda is None else _lambda
         _k = self._k if _k is None else _k
+        _delay = self._delay if _delay is None else _delay
         return _lambda * scipy.special.gamma(1 + 1/_k) + _delay
 
     def median(self, _lambda=None, _k=None, _delay=None):
         _lambda = self._lambda if _lambda is None else _lambda
         _k = self._k if _k is None else _k
-        return _lambda * numpy.power(numpy.log(2), 1/k) + _delay
+        _delay = self._delay if _delay is None else _delay
+        return _lambda * numpy.power(numpy.log(2), 1/_k) + _delay
 
     def variance(self, _lambda=None, _k=None, _delay=None):
         _lambda = self._lambda if _lambda is None else _lambda
@@ -206,37 +208,36 @@ class DelayedWeibull(Distribution):
         gam2 = scipy.special.gamma(1 + 2/_k)
         gam1 = scipy.special.gamma(1 + 1/_k)
         return numpy.square(_lambda) * (gam2 - numpy.square(gam1))
-    
+
 
 class Gamma(Distribution):
-    def __init__(self, _alpha, _beta):
-        self._alpha = _alpha
-        self._beta = _beta
+    def __init__(self, _k, _theta):
+        self._k = _k
+        self._theta = _theta
 
-    def pdf(self, t, _alpha=None, _beta=None):
-        _alpha = self._alpha if _alpha is None else _alpha
-        _beta = self._beta if _beta is None else _beta
-        return numpy.power(_beta, _alpha)/scipy.special.gamma(_alpha) * \
-            numpy.power(t, _alpha-1) * numpy.exp(-_beta*t)
+    def pdf(self, t, _k=None, _theta=None):
+        _k = self._k if _k is None else _k
+        _theta = self._theta if _theta is None else _theta
+        return (numpy.power(t, _k-1) * numpy.exp(-t/_theta)) / \
+            (scipy.special.gamma(_k)*numpy.power(_theta, _k))
+        
+    def cdf(self, t, _k=None, _theta=None):
+        _k = self._k if _k is None else _k
+        _theta = self._theta if _theta is None else _theta
+        return scipy.special.gammainc(_k, t/_theta) / scipy.special.gamma(_k)
 
-    def cdf(self, t, _alpha=None, _beta=None):
-        _alpha = self._alpha if _alpha is None else _alpha
-        _beta = self._beta if _beta is None else _beta
-        return scipy.special.gammainc(_alpha, _beta*t) / \
-            scipy.special.gamma(_alpha)
+    def mean(self, _k=None, _theta=None):
+        _k = self._k if _k is None else _k
+        _theta = self._theta if _theta is None else _theta
+        return _k * _theta
 
-    def mean(self, _alpha=None, _beta=None):
-        _alpha = self._alpha if _alpha is None else _alpha
-        _beta = self._beta if _beta is None else _beta
-        return _alpha / _beta
-
-    def median(self, _alpha=None, _beta=None):
+    def median(self, _k=None, _theta=None):
         raise ValueError('no closed form')
 
-    def variance(self, _alpha=None, _beta=None):
-        _alpha = self._alpha if _alpha is None else _alpha
-        _beta = self._beta if _beta is None else _beta
-        return _alpha / numpy.square(_beta)
+    def variance(self, _k=None, _theta=None):
+        _k = self._k if _k is None else _k
+        _theta = self._theta if _theta is None else _theta
+        return _k * numpy.square(_theta)
 
 
 class DelayedGamma(Gamma):
@@ -244,25 +245,25 @@ class DelayedGamma(Gamma):
         super().__init__(_alpha, _beta)
         self._delay = _delay
 
-    def pdf(self, t, _alpha=None, _beta=None, _delay=None):
-        _alpha = self._alpha if _alpha is None else _alpha
-        _beta = self._beta if _beta is None else _beta
+    def pdf(self, t, _k=None, _theta=None, _delay=None):
+        _k = self._k if _k is None else _k
+        _theta = self._theta if _theta is None else _theta
         _delay = self._delay if _delay is None else _delay
         filt = t >= _delay
         zero = numpy.zeros((numpy.sum(numpy.logical_not(filt)),))
-        rest = super().pdf(t[filt]-_delay, _alpha, _beta)
+        rest = super().pdf(t[filt]-_delay, _k, _theta)
         return numpy.concatenate([zero, rest])
 
-    def cdf(self, t, _alpha=None, _beta=None, _delay=None):
-        _alpha = self._alpha if _alpha is None else _alpha
-        _beta = self._beta if _beta is None else _beta
+    def cdf(self, t, _k=None, _theta=None, _delay=None):
+        _k = self._k if _k is None else _k
+        _theta = self._theta if _theta is None else _theta
         _delay = self._delay if _delay is None else _delay
         filt = t >= _delay
         zero = numpy.zeros((numpy.sum(numpy.logical_not(filt)),))
-        rest = super().cdf(t[filt]-_delay, _alpha, _beta)
+        rest = super().cdf(t[filt]-_delay, _k, _theta)
         return numpy.concatenate([zero, rest])
 
-    def mean(self, _alpha=None, _beta=None, _delay=None):
+    def mean(self, _k=None, _theta=None, _delay=None):
         _delay = self._delay if _delay is None else _delay
         return super().mean(_alpha, _beta) + _delay
 
